@@ -37,7 +37,7 @@ Pre-inject the config before starting the container. Done.
 ### 1. Clone this repo
 
 ```bash
-git clone https://github.com/YOUR_USER/obsidianless.git
+git clone https://github.com/lucastraba/obsidianless.git
 cd obsidianless
 ```
 
