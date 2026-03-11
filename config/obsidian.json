@@ -1,0 +1,10 @@
+{
+  "vaults": {
+    "my-vault": {
+      "path": "/vault/MyVault",
+      "ts": 1710000000000,
+      "open": true
+    }
+  },
+  "cli": true
+}

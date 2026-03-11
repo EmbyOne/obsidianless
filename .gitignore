@@ -1,0 +1,7 @@
+# Don't commit actual vault data
+vault/
+*.obsidian/
+
+# OS
+.DS_Store
+Thumbs.db
