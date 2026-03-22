@@ -1,6 +1,6 @@
 # Don't commit actual vault data
 vault/
-*.obsidian/
+**/.obsidian
 
 # OS
 .DS_Store
