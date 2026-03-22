@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONTAINER="${OB_CONTAINER:-obsidian}"
+IMAGE="${OB_IMAGE:-obsidianless}"
+CONFIG_PATH="${OB_CONFIG_PATH:-$HOME/.config/obsidian}"
+
+STDERR_NOISE=(
+    "ERROR:dbus/bus.cc"
+    "ERROR:gpu_init.cc"
+    "ERROR:gpu_process"
+    "MESA-LOADER"
+    "libGL"
+    "ERROR:sandbox"
+)
+
+usage() {
+    cat <<'EOF'
+Usage: ob <command> [args...]
+
+Wrapper for the Obsidian CLI running inside a Docker container.
+
+Lifecycle:
+  ob up        Start the container (requires OB_VAULT_PATH)
+  ob down      Stop and remove the container
+  ob status    Show container state, uptime, and health
+
+Any other arguments are forwarded to the Obsidian CLI inside the container.
+
+Environment variables:
+  OB_CONTAINER   Container name        (default: obsidian)
+  OB_IMAGE       Docker image          (default: obsidianless)
+  OB_VAULT_PATH  Host vault directory  (required for 'ob up')
+  OB_CONFIG_PATH Obsidian config dir   (default: ~/.config/obsidian)
+  OB_DOCKER_OPTS Extra docker run flags
+EOF
+}
+
+filter_stderr() {
+    local pattern
+    pattern=$(IFS='|'; echo "${STDERR_NOISE[*]}")
+    grep -v -E "$pattern" || true
+}
+
+require_running() {
+    local state
+    state=$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo "not_found")
+    if [[ "$state" != "running" ]]; then
+        echo "Obsidian container is not running. Start it with: ob up" >&2
+        exit 1
+    fi
+}
+
+cmd_up() {
+    local state
+    state=$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo "not_found")
+
+    case "$state" in
+        running)
+            echo "Container '$CONTAINER' is already running."
+            return 0
+            ;;
+        exited|created|dead)
+            echo "Removing stopped container '$CONTAINER'..."
+            docker rm -f "$CONTAINER" >/dev/null
+            ;;
+        not_found)
+            ;;
+        *)
+            docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+            ;;
+    esac
+
+    if [[ -z "${OB_VAULT_PATH:-}" ]]; then
+        echo "ERROR: OB_VAULT_PATH is required. Set it to the path of your Obsidian vault." >&2
+        exit 1
+    fi
+
+    if [[ ! -d "$OB_VAULT_PATH" ]]; then
+        echo "ERROR: OB_VAULT_PATH '$OB_VAULT_PATH' is not a directory." >&2
+        exit 1
+    fi
+
+    mkdir -p "$CONFIG_PATH"
+
+    # Ensure obsidian.json exists with CLI enabled and vault configured
+    local vault_name
+    vault_name=$(basename "$OB_VAULT_PATH")
+    local config_file="$CONFIG_PATH/obsidian.json"
+    if [[ ! -f "$config_file" ]]; then
+        cat > "$config_file" <<EOJSON
+{"vaults":{"$vault_name":{"path":"/vault/$vault_name","ts":1710000000000,"open":true}},"cli":true}
+EOJSON
+        echo "Generated $config_file"
+    elif ! grep -q '"cli"' "$config_file"; then
+        echo "WARNING: $config_file exists but CLI may not be enabled. Ensure it contains '\"cli\": true'." >&2
+    fi
+
+    echo "Starting container '$CONTAINER'..."
+    # shellcheck disable=SC2086
+    docker run -d \
+        --name "$CONTAINER" \
+        -v "$OB_VAULT_PATH":/vault/"$vault_name" \
+        -v "$CONFIG_PATH":/home/obsidian/.config/obsidian \
+        ${OB_DOCKER_OPTS:-} \
+        "$IMAGE"
+
+    echo "Waiting for healthcheck..."
+    local elapsed=0
+    while (( elapsed < 30 )); do
+        local health
+        health=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo "unknown")
+        if [[ "$health" == "healthy" ]]; then
+            echo "Container '$CONTAINER' is healthy."
+            return 0
+        fi
+        sleep 1
+        (( elapsed++ )) || true
+    done
+
+    echo "WARNING: healthcheck did not pass within 30s (container may still be starting)." >&2
+}
+
+cmd_down() {
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 && echo "Container '$CONTAINER' stopped and removed." \
+        || echo "Container '$CONTAINER' not found."
+}
+
+cmd_status() {
+    if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+        echo "Container '$CONTAINER': not found"
+        return 1
+    fi
+
+    local info
+    info=$(docker inspect -f 'Container: {{.Name}}
+State:     {{.State.Status}}
+Started:   {{.State.StartedAt}}
+Health:    {{if .State.Health}}{{.State.Health.Status}}{{else}}N/A{{end}}' "$CONTAINER" 2>/dev/null)
+    echo "$info"
+}
+
+if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    usage
+    exit 0
+fi
+
+case "$1" in
+    up)     cmd_up ;;
+    down)   cmd_down ;;
+    status) cmd_status ;;
+    *)
+        require_running
+        rc=0
+        timeout 10s docker exec -e DISPLAY=:99 "$CONTAINER" \
+            /opt/obsidian/obsidian --no-sandbox "$@" \
+            2> >(filter_stderr >&2) \
+            || rc=$?
+        if [[ $rc -eq 124 ]]; then
+            echo "ERROR: ob timed out after 10s" >&2
+        fi
+        exit "$rc"
+        ;;
+esac

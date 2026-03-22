@@ -1,6 +1,10 @@
 # Don't commit actual vault data
 vault/
-*.obsidian/
+**/.obsidian
+
+# Obsidian/Electron runtime artifacts (created when container runs)
+config/*
+!config/obsidian.json
 
 # OS
 .DS_Store
