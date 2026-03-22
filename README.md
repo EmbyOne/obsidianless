@@ -65,11 +65,24 @@ Edit `obsidian.json` to point to your vault's mount path:
 ```bash
 docker build -t obsidianless .
 
+# Custom Obsidian version or UID/GID:
+# docker build -t obsidianless --build-arg OBSIDIAN_VERSION=1.12.4 --build-arg UID=1001 --build-arg GID=1001 .
+
 docker run -d --name obsidian \
   -v /path/to/your/vault:/vault/MyVault \
   -v ./config:/home/obsidian/.config/obsidian \
   obsidianless
 ```
+
+| Build arg | Default | Description |
+|-----------|---------|-------------|
+| `OBSIDIAN_VERSION` | `1.12.4` | Obsidian release to install |
+| `UID` | `1000` | Container user UID (match your host user) |
+| `GID` | `1000` | Container user GID |
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `ENABLE_CDP` | `false` | Set to `true` to expose Chrome DevTools Protocol on port 9223. **Warning:** CDP grants full remote code execution — do not expose to untrusted networks. |
 
 ### 4. Use the CLI
 
