@@ -48,7 +48,7 @@ RUN mkdir -p /vault && chown obsidian:obsidian /vault && \
 COPY entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+HEALTHCHECK --interval=10s --start-period=5s --timeout=5s --retries=3 \
     CMD pgrep -f "obsidian" > /dev/null || exit 1
 
 USER obsidian
