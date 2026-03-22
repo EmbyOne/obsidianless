@@ -2,6 +2,10 @@
 vault/
 **/.obsidian
 
+# Obsidian/Electron runtime artifacts (created when container runs)
+config/*
+!config/obsidian.json
+
 # OS
 .DS_Store
 Thumbs.db
