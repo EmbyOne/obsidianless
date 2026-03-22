@@ -2,19 +2,19 @@
 set -e
 
 # Clean up stale X lock files from previous runs
-rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
 
 # Start virtual display
 Xvfb :99 -screen 0 1024x768x24 -nolisten tcp &
 export DISPLAY=:99
 
-# Wait for display to be ready
-for i in $(seq 1 10); do
-    if xdpyinfo -display :99 >/dev/null 2>&1; then
+# Wait for display to be ready (check for X socket file)
+for i in $(seq 1 20); do
+    if [ -e /tmp/.X11-unix/X99 ]; then
         break
     fi
-    if [ "$i" -eq 10 ]; then
-        echo "ERROR: Xvfb failed to start after 10 attempts" >&2
+    if [ "$i" -eq 20 ]; then
+        echo "ERROR: Xvfb failed to start after 10 seconds" >&2
         exit 1
     fi
     sleep 0.5

@@ -20,7 +20,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
-    x11-xserver-utils \
     libgtk-3-0 \
     libnotify4 \
     libnss3 \
@@ -37,11 +36,13 @@ COPY --from=download /opt/obsidian /opt/obsidian
 
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g ${GID} obsidian 2>/dev/null || true; \
-    useradd -m -s /bin/bash -u ${UID} -o -g ${GID} obsidian
+RUN userdel -r ubuntu 2>/dev/null; groupdel ubuntu 2>/dev/null; \
+    groupadd -g ${GID} obsidian && \
+    useradd -m -s /bin/bash -u ${UID} -g obsidian obsidian
 
-# Create vault mount point
-RUN mkdir -p /vault && chown obsidian:obsidian /vault
+# Create vault mount point and X11 socket directory
+RUN mkdir -p /vault && chown obsidian:obsidian /vault && \
+    mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # Create startup script
 COPY entrypoint.sh /opt/entrypoint.sh
